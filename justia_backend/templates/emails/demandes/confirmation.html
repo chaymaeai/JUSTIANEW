@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Demande recue{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Votre demande <strong>{{ demande.reference }}</strong> a bien ete enregistree.</p>
+<p style="margin:0;">Notre equipe l'analyse et vous informera rapidement des prochaines etapes.</p>
+{% endblock %}

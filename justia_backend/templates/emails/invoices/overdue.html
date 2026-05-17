@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Facture en retard{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">La facture <strong>{{ invoice.number }}</strong> est en retard de paiement.</p>
+<p style="margin:0;">Merci de regulariser des que possible.</p>
+{% endblock %}

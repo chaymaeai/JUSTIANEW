@@ -1,0 +1,238 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Tableau de bord Publications{% endblock %}
+
+{% block content %}
+<div style="font-family:'DM Sans',sans-serif;max-width:1200px">
+
+  <h1 style="color:#001A33;font-size:28px;margin-bottom:24px">
+    📰 Gestion des Publications
+  </h1>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px">
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #00B2FF;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.total }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">📄 Total publications</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #10B981;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.publie }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">✅ Publiées</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #F59E0B;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.brouillon }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">✏️ Brouillons</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #8B5CF6;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.planifie }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">📅 Planifiées</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px">
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #00D4AA;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.this_month }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">📆 Ce mois-ci</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #2979FF;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.total_views }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">👁️ Vues totales</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #EF4444;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.pending_comments }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">💬 Commentaires à modérer</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;
+                border-left:4px solid #10B981;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <div style="font-size:28px;font-weight:700;color:#001A33">{{ stats.subscribers }}</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:4px">📧 Abonnés newsletter</div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:32px">
+    <a href="{% url 'admin:publications_publication_add' %}"
+       style="background:#001A33;color:white;padding:12px 24px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+      ✏️ Nouvelle publication
+    </a>
+    <a href="{% url 'admin:publications_publication_changelist' %}"
+       style="background:#00B2FF;color:white;padding:12px 24px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+      📋 Toutes les publications
+    </a>
+    <a href="{% url 'admin:publications_comment_changelist' %}?status__exact=en_attente"
+       style="background:#F59E0B;color:white;padding:12px 24px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+      💬 Modérer commentaires ({{ stats.pending_comments }})
+    </a>
+    <a href="{% url 'admin:publications_newslettersubscriber_changelist' %}"
+       style="background:#00D4AA;color:white;padding:12px 24px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+      📧 Newsletter
+    </a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+
+    <div style="background:white;border-radius:12px;padding:24px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <h2 style="font-size:16px;font-weight:600;color:#001A33;
+                 margin:0 0 16px;padding-bottom:12px;
+                 border-bottom:2px solid #F3F4F6">
+        ✏️ Brouillons à publier
+      </h2>
+      {% for pub in drafts %}
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:12px 0;border-bottom:1px solid #F3F4F6">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#001A33;
+                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ pub.title }}
+          </div>
+          <div style="font-size:11px;color:#9CA3AF;margin-top:2px">
+            {{ pub.get_pub_type_display }} ·
+            modifié {{ pub.updated_at|timesince }}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0">
+          <a href="{% url 'admin:publications_publication_change' pub.pk %}"
+             style="background:#F3F4F6;color:#374151;padding:4px 10px;
+                    border-radius:6px;font-size:11px;text-decoration:none">
+            ✏️ Éditer
+          </a>
+          <a href="{% url 'admin:publications_publication_quick_publish' pub.pk %}"
+             style="background:#10B981;color:white;padding:4px 10px;
+                    border-radius:6px;font-size:11px;text-decoration:none">
+            🚀 Publier
+          </a>
+        </div>
+      </div>
+      {% empty %}
+      <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:20px 0">
+        ✅ Aucun brouillon en attente
+      </p>
+      {% endfor %}
+    </div>
+
+    <div style="background:white;border-radius:12px;padding:24px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <h2 style="font-size:16px;font-weight:600;color:#001A33;
+                 margin:0 0 16px;padding-bottom:12px;
+                 border-bottom:2px solid #F3F4F6">
+        📅 Publications planifiées
+      </h2>
+      {% for pub in scheduled %}
+      <div style="padding:12px 0;border-bottom:1px solid #F3F4F6">
+        <div style="font-size:13px;font-weight:600;color:#001A33">
+          {{ pub.title }}
+        </div>
+        <div style="font-size:11px;color:#8B5CF6;margin-top:4px">
+          🕐 {{ pub.scheduled_at|date:"d M Y à H:i" }}
+        </div>
+      </div>
+      {% empty %}
+      <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:20px 0">
+        Aucune publication planifiée
+      </p>
+      {% endfor %}
+    </div>
+
+    <div style="background:white;border-radius:12px;padding:24px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <h2 style="font-size:16px;font-weight:600;color:#001A33;
+                 margin:0 0 16px;padding-bottom:12px;
+                 border-bottom:2px solid #F3F4F6">
+        🏆 Les plus consultées
+      </h2>
+      {% for pub in top_views %}
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:10px 0;border-bottom:1px solid #F3F4F6">
+        <div style="font-size:13px;color:#001A33;overflow:hidden;
+                    text-overflow:ellipsis;white-space:nowrap;flex:1">
+          {{ pub.title }}
+        </div>
+        <div style="font-size:12px;color:#00B2FF;font-weight:600;
+                    margin-left:12px;flex-shrink:0">
+          👁️ {{ pub.views_count }}
+        </div>
+      </div>
+      {% empty %}
+      <p style="color:#9CA3AF;font-size:13px">Aucune donnée</p>
+      {% endfor %}
+    </div>
+
+    <div style="background:white;border-radius:12px;padding:24px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <h2 style="font-size:16px;font-weight:600;color:#001A33;
+                 margin:0 0 16px;padding-bottom:12px;
+                 border-bottom:2px solid #F3F4F6">
+        💬 Commentaires à modérer
+      </h2>
+      {% for comment in moderation_queue %}
+      <div style="padding:10px 0;border-bottom:1px solid #F3F4F6">
+        <div style="font-size:12px;font-weight:600;color:#001A33">
+          {{ comment.author_name }}
+          <span style="color:#9CA3AF;font-weight:400">
+            sur « {{ comment.publication.title|truncatechars:30 }} »
+          </span>
+        </div>
+        <div style="font-size:12px;color:#6B7280;margin-top:4px">
+          {{ comment.content|truncatechars:80 }}
+        </div>
+        <div style="margin-top:6px">
+          <a href="{% url 'admin:publications_comment_change' comment.pk %}"
+             style="background:#2979FF;color:white;padding:3px 8px;
+                    border-radius:4px;font-size:11px;text-decoration:none">
+            📝 Modérer
+          </a>
+        </div>
+      </div>
+      {% empty %}
+      <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:20px 0">
+        ✅ Aucun commentaire en attente
+      </p>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <div style="background:white;border-radius:12px;padding:24px;margin-top:24px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <h2 style="font-size:16px;font-weight:600;color:#001A33;
+               margin:0 0 16px;padding-bottom:12px;
+               border-bottom:2px solid #F3F4F6">
+      📰 Récemment publiées
+    </h2>
+    {% for pub in recent %}
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:10px 0;border-bottom:1px solid #F3F4F6">
+      <a href="{% url 'admin:publications_publication_change' pub.pk %}"
+         style="font-size:13px;color:#001A33;text-decoration:none;font-weight:600;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">
+        {{ pub.title }}
+      </a>
+      <span style="font-size:11px;color:#9CA3AF;margin-left:12px;flex-shrink:0">
+        {{ pub.published_at|date:"d M Y" }}
+      </span>
+    </div>
+    {% empty %}
+    <p style="color:#9CA3AF;font-size:13px">—</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

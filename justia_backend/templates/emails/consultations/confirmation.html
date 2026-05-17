@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Consultation confirmee{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Votre consultation est confirmee pour le {{ consultation.scheduled_at }}.</p>
+<p style="margin:0;">Un fichier calendrier (.ics) est ajoute a l'email de confirmation.</p>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Rappel de paiement{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Rappel de paiement pour la facture <strong>{{ invoice.number }}</strong>.</p>
+<p style="margin:0;">Date d'echeance: <strong>{{ invoice.due_date }}</strong>.</p>
+{% endblock %}

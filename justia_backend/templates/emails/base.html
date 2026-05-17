@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}JUSTIA{% endblock %}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f2f5f9;font-family:'DM Sans',Arial,sans-serif;color:#333333;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f2f5f9;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="background:#001A33;padding:20px 24px;text-align:center;">
+                <div style="font-size:24px;font-weight:700;color:#ffffff;letter-spacing:1px;">JUSTIA</div>
+                <div style="font-size:13px;color:#dce8f5;margin-top:4px;">LegalTech Platform</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 24px 20px 24px;font-size:15px;line-height:1.6;">
+                <p style="margin:0 0 14px 0;">Bonjour {{ user.first_name|default:"" }},</p>
+                {% block content %}{% endblock %}
+                {% block cta %}
+                {% endblock %}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px 24px 24px;border-top:1px solid #e7ebf0;color:#6d7783;font-size:12px;line-height:1.6;">
+                <p style="margin:0 0 8px 0;">Cet email est envoye automatiquement par JUSTIA.</p>
+                <p style="margin:0 0 8px 0;">
+                  Protection des donnees (RGPD): vos informations sont traitees de maniere securisee.
+                </p>
+                <p style="margin:0;">
+                  <a href="{{ frontend_url }}/preferences/notifications" style="color:#00B2FF;text-decoration:none;">Se desabonner</a>
+                  <span style="color:#9aa4ae;"> | </span>
+                  <span>&copy; {{ current_year }} JUSTIA</span>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

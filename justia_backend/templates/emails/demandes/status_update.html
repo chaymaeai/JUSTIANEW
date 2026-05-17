@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Mise a jour de statut{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Le statut de votre demande <strong>{{ demande.reference }}</strong> a change.</p>
+<p style="margin:0;">Nouveau statut: <strong>{{ demande.get_status_display }}</strong>.</p>
+{% endblock %}

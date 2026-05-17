@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Rappel consultation demain{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Rappel: votre consultation est prevue demain.</p>
+<p style="margin:0;">Horaire: {{ consultation.scheduled_at }}.</p>
+{% endblock %}

@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: justia_db
+      POSTGRES_USER: justia
+      POSTGRES_PASSWORD: justia
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://justia:justia@db:5432/justia_db
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CHANNEL_REDIS_URL: redis://redis:6379/2
+    depends_on:
+      - db
+      - redis
+
+  celery:
+    build: .
+    command: celery -A config.celery worker -l info
+    volumes:
+      - .:/app
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://justia:justia@db:5432/justia_db
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CHANNEL_REDIS_URL: redis://redis:6379/2
+    depends_on:
+      - redis
+      - db
+
+  celery-beat:
+    build: .
+    command: celery -A config.celery beat -l info
+    volumes:
+      - .:/app
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CHANNEL_REDIS_URL: redis://redis:6379/2
+    depends_on:
+      - redis
+
+volumes:
+  postgres_data:

@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block title %}Nouvelle facture disponible{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px 0;">La facture <strong>{{ invoice.number }}</strong> est disponible.</p>
+<p style="margin:0;">Montant total: <strong>{{ invoice.total }} {{ invoice.currency }}</strong>.</p>
+{% endblock %}
