@@ -16,6 +16,7 @@ import ClientDocuments from './pages/client/ClientDocuments'
 import ClientFactures from './pages/client/ClientFactures'
 import ClientProfile from './pages/client/ClientProfile'
 import ClientAdminPublications from './pages/client/ClientAdminPublications'
+import ClientNotifications from './pages/client/ClientNotifications'  // ✅
 import FournisseurLayout from './pages/fournisseur/FournisseurLayout'
 import FournisseurDashboard from './pages/fournisseur/FournisseurDashboard'
 import FournisseurDemandes from './pages/fournisseur/FournisseurDemandes'
@@ -25,15 +26,21 @@ import FournisseurDocuments from './pages/fournisseur/FournisseurDocuments'
 import FournisseurFacturation from './pages/fournisseur/FournisseurFacturation'
 import FournisseurEquipe from './pages/fournisseur/FournisseurEquipe'
 import FournisseurReports from './pages/fournisseur/FournisseurReports'
+import FournisseurSettings from './pages/fournisseur/FournisseurSettings'
+import FournisseurNotifications from './pages/fournisseur/FournisseurNotifications'
 import AdminLayout from './pages/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminManageExperts from './pages/admin/AdminManageExperts'
 import AdminClients from './pages/admin/AdminClients'
 import AdminReports from './pages/admin/AdminReports'
 import AdminSettings from './pages/admin/AdminSettings'
+import AdminDemandes from './pages/admin/AdminDemandes'
 import PublicationsPage from './pages/publications/PublicationsPage'
 import PublicationDetail from './pages/publications/PublicationDetail'
-import AdminDemandes from './pages/admin/AdminDemandes'
+import ClientSettings from "@/pages/client/ClientSettings";
+
+
+
 function App() {
   return (
     <Router>
@@ -50,25 +57,31 @@ function App() {
           <Route path="/client-space/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ForgotPasswordPage />} />
           
-          {/* Legacy redirect: any authenticated user; role check happens on /espace-client/* */}
+
           <Route element={<ProtectedRoute />}>
             <Route path="/client-space/dashboard" element={<Navigate to="/espace-client/dashboard" replace />} />
           </Route>
 
+          {/* Client */}
           <Route element={<ProtectedRoute allowedRoles={['client', 'admin']} />}>
             <Route path="/espace-client" element={<ClientLayout />}>
               <Route index element={<Navigate to="/espace-client/dashboard" replace />} />
               <Route path="dashboard" element={<ClientDashboard />} />
               <Route path="demandes" element={<ClientDemandes />} />
               <Route path="consultations" element={<ClientConsultations />} />
+              <Route path="consultations/:id" element={<ClientConsultations />} />
               <Route path="meetings" element={<ClientMeetings />} />
               <Route path="documents" element={<ClientDocuments />} />
               <Route path="factures" element={<ClientFactures />} />
+              <Route path="factures/:id" element={<ClientFactures />} />
               <Route path="profil" element={<ClientProfile />} />
               <Route path="publications" element={<ClientAdminPublications />} />
+              <Route path="notifications" element={<ClientNotifications />} />  {/* ✅ */}
+              <Route path="parametres" element={<ClientSettings />} />
             </Route>
           </Route>
 
+          {/* Expert */}
           <Route element={<ProtectedRoute allowedRoles={['provider', 'admin']} />}>
             <Route path="/fournisseur" element={<FournisseurLayout />}>
               <Route index element={<Navigate to="/fournisseur/dashboard" replace />} />
@@ -81,10 +94,12 @@ function App() {
               <Route path="facturation" element={<FournisseurFacturation />} />
               <Route path="equipe" element={<FournisseurEquipe />} />
               <Route path="reports" element={<FournisseurReports />} />
+              <Route path="parametres" element={<FournisseurSettings />} />
+              <Route path="notifications" element={<FournisseurNotifications />} />
             </Route>
           </Route>
 
-          {/* Admin Space */}
+          {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="/admin/dashboard" replace />} />
@@ -93,7 +108,7 @@ function App() {
               <Route path="clients" element={<AdminClients />} />
               <Route path="reports" element={<AdminReports />} />
               <Route path="settings" element={<AdminSettings />} />
-              <Route path="demandes" element={<AdminDemandes />} />  {/* ✅ */}
+              <Route path="demandes" element={<AdminDemandes />} />
             </Route>
           </Route>
         </Routes>

@@ -168,6 +168,34 @@ class DemandeViewSet(viewsets.ModelViewSet):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
+
+        # ✅ Notifier le destinataire
+        try:
+            from apps.notifications.services import notify
+            sender = request.user
+            role = getattr(sender, "role", None)
+
+            if role in ("expert", "fournisseur", "admin") and demande.client_id:
+                notify(
+                    recipient_id=demande.client_id,
+                    notif_type="nouveau_message",
+                    title="Nouveau message de votre expert",
+                    message=f"Vous avez reçu un message concernant votre dossier {demande.reference}.",
+                    link=f"/client-space/demandes/{demande.id}",
+                    demande_id=demande.id,
+                )
+            elif role == "client" and demande.assigned_to_id:
+                notify(
+                    recipient_id=demande.assigned_to_id,
+                    notif_type="nouveau_message",
+                    title="Nouveau message du client",
+                    message=f"Le client a envoyé un message sur le dossier {demande.reference}.",
+                    link=f"/fournisseur/demandes/{demande.id}",
+                    demande_id=demande.id,
+                )
+        except Exception:
+            pass
+
         return Response(
             DemandeMessageSerializer(
                 ser.instance, context={"request": request}

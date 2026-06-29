@@ -56,15 +56,15 @@ class DocumentViewSet(viewsets.ModelViewSet):
         qs = Document.objects.select_related(
             "owner", "demande", "demande__client", "demande__assigned_to", "consultation"
         )
-        if role == "client":
-            return qs.filter(owner=user)
-        if role in ("fournisseur", "expert"):
-            return qs.filter(
-                Q(demande__assigned_to=user) | Q(owner=user)
-            ).distinct()
         if role == "admin":
             return qs
-        return Document.objects.none()
+        if role in ("fournisseur", "expert"):
+            return qs.filter(
+                Q(owner=user) | Q(demande__assigned_to=user)
+            ).distinct()
+        return qs.filter(
+            Q(owner=user) | Q(demande__client=user, is_private=False)
+        ).distinct()
 
     def get_serializer_class(self):
         if self.action == "create":

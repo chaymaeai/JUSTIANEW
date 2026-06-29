@@ -17,8 +17,11 @@ interface Invoice {
   due_date: string;
   created_at: string;
   paid_at: string | null;
-  client: { id: string; first_name: string; last_name: string; email: string } | null;
+  client: { id: string; first_name: string; last_name: string; email: string } | string | null;
   client_name?: string;
+  client_first_name?: string;
+  client_last_name?: string;
+  client_email?: string;
 }
 
 interface Client {
@@ -59,6 +62,30 @@ function fmt(value: string | number, currency = "MAD") {
   return `${num.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} ${currency}`;
 }
 
+// ── Affichage robuste du nom du client, quelle que soit la forme renvoyée par l'API ──
+function getClientLabel(inv: Invoice): string {
+  if (inv.client_name && inv.client_name.trim()) return inv.client_name;
+
+  if (inv.client && typeof inv.client === "object") {
+    const first = inv.client.first_name?.trim() ?? "";
+    const last = inv.client.last_name?.trim() ?? "";
+    const full = `${first} ${last}`.trim();
+    if (full) return full;
+    if (inv.client.email) return inv.client.email;
+  }
+
+  const flatFirst = inv.client_first_name?.trim() ?? "";
+  const flatLast = inv.client_last_name?.trim() ?? "";
+  const flatFull = `${flatFirst} ${flatLast}`.trim();
+  if (flatFull) return flatFull;
+
+  if (inv.client_email) return inv.client_email;
+
+  if (typeof inv.client === "string" && inv.client.trim()) return inv.client;
+
+  return "—";
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function FournisseurFacturation() {
   const [tab, setTab]           = useState<"factures" | "revenus">("factures");
@@ -70,6 +97,7 @@ export default function FournisseurFacturation() {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [success, setSuccess]   = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     client_id: "",
@@ -153,6 +181,22 @@ export default function FournisseurFacturation() {
     }
   };
 
+  // ── Télécharger le PDF (authentifié via Axios, pas via window.open direct) ──
+  const handleDownloadPdf = async (invoice: Invoice) => {
+    setDownloadingId(invoice.id);
+    setError(null);
+    try {
+      const res = await api.get(`/invoices/${invoice.id}/pdf/`, { responseType: "blob" });
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Impossible d'ouvrir le PDF."));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
 
@@ -219,11 +263,7 @@ export default function FournisseurFacturation() {
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="border-t border-slate-100">
                       <td className="px-4 py-3 font-medium">{inv.number}</td>
-                      <td className="px-4 py-3">
-                        {inv.client
-                          ? `${inv.client.first_name} ${inv.client.last_name}`
-                          : inv.client_name ?? "—"}
-                      </td>
+                      <td className="px-4 py-3">{getClientLabel(inv)}</td>
                       <td className="px-4 py-3">{fmt(inv.total, inv.currency)}</td>
                       <td className="px-4 py-3">
                         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_CLASS[inv.status])}>
@@ -237,9 +277,10 @@ export default function FournisseurFacturation() {
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm" variant="outline"
-                            onClick={() => window.open(`/api/invoices/${inv.id}/pdf/`, "_blank")}
+                            disabled={downloadingId === inv.id}
+                            onClick={() => handleDownloadPdf(inv)}
                           >
-                            PDF
+                            {downloadingId === inv.id ? "..." : "PDF"}
                           </Button>
                           {inv.status === "brouillon" && (
                             <Button

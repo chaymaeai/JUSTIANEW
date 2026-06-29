@@ -27,7 +27,9 @@ def send_password_reset_email(user_id: str, token_uuid: str) -> None:
     from .models import User
 
     user = User.objects.get(pk=user_id)
-    link = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token_uuid}"
+    # ✅ Corrigé : pointe vers la vraie route frontend (ForgotPasswordPage.tsx),
+    # qui passe en mode "reset" quand un ?token= est présent dans l'URL.
+    link = f"{settings.FRONTEND_URL.rstrip('/')}/client-space/forgot-password?token={token_uuid}"
     send_mail(
         subject="Réinitialisation du mot de passe — JUSTIA",
         message=f"Bonjour {user.first_name},\n\n"

@@ -1,13 +1,9 @@
-import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/AuthContext";
-import { cn } from "@/lib/utils";
-
-type TabId = "infos" | "securite" | "notifications" | "confidentialite";
+import { api } from "@/services/api";
 
 interface ProfileFormState {
   nom: string;
@@ -15,314 +11,281 @@ interface ProfileFormState {
   email: string;
   telephone: string;
   entreprise: string;
+  adresse: string;
 }
 
 export default function ClientProfile() {
-  const { user } = useAuth();
-  const [tab, setTab] = useState<TabId>("infos");
-  const [editingCard, setEditingCard] = useState(false);
-  const [toast, setToast] = useState("");
-  const [avatarPreview, setAvatarPreview] = useState(user?.avatar ?? "");
+  const { user, updateUser } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [avatarPreview, setAvatarPreview] = useState<string>(user?.avatar ?? "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [saving, setSaving] = useState(false);
+  
   const [profile, setProfile] = useState<ProfileFormState>({
     nom: user?.lastName ?? "",
     prenom: user?.firstName ?? "",
     email: user?.email ?? "",
     telephone: "",
     entreprise: user?.company ?? "",
+    adresse: "",
   });
-  const [passwordForm, setPasswordForm] = useState({ oldPassword: "", newPassword: "", confirmPassword: "" });
-  const [notif, setNotif] = useState({
-    reponseDemande: true,
-    rappelRdv: true,
-    smsConfirmation: true,
-    nouvelleFacture: true,
-  });
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const tabs: Array<{ id: TabId; label: string }> = useMemo(
-    () => [
-      { id: "infos", label: "Informations personnelles" },
-      { id: "securite", label: "Securite" },
-      { id: "notifications", label: "Notifications" },
-      { id: "confidentialite", label: "Confidentialite" },
-    ],
-    []
-  );
-
-  const roleLabel = user?.role === "admin" ? "Admin" : user?.role === "provider" ? "Expert" : "Client";
+  const roleLabel =
+    user?.role === "admin" ? "Admin" : user?.role === "provider" ? "Expert" : "Client";
   const memberSince = "Mars 2026";
 
-  const showToast = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2500);
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 3000);
   };
 
-  const saveProfile = async () => {
-    try {
-      const response = await fetch("/api/users/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: profile.prenom,
-          lastName: profile.nom,
-          email: profile.email,
-          phone: profile.telephone,
-          company: profile.entreprise,
-        }),
-      });
-      if (!response.ok) throw new Error("profile_failed");
-      setEditingCard(false);
-      showToast("Informations personnelles mises a jour.");
-    } catch {
-      showToast("Erreur lors de la mise a jour du profil.");
-    }
-  };
-
-  const changePassword = async () => {
-    if (passwordForm.newPassword.length < 8) {
-      showToast("Le nouveau mot de passe doit contenir au moins 8 caracteres.");
+  const handleAvatarChange = (file: File) => {
+    if (!file.type.match(/image\/(jpeg|png)/)) {
+      showToast("Seuls les fichiers JPG et PNG sont acceptés.", "error");
       return;
     }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      showToast("La confirmation du mot de passe ne correspond pas.");
-      return;
-    }
-    setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
-    showToast("Mot de passe mis a jour.");
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
-  const saveNotifications = async () => {
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleAvatarChange(file);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const response = await fetch("/api/users/me/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(notif),
+      await api.patch("/auth/me/", {
+        first_name: profile.prenom,
+        last_name: profile.nom,
+        phone: profile.telephone,
+        company: profile.entreprise,
       });
-      if (!response.ok) throw new Error("notif_failed");
-      showToast("Preferences de notification enregistrees.");
-    } catch {
-      showToast("Erreur de sauvegarde des notifications.");
+
+      // ✅ Met à jour le contexte → sidebar se rafraîchit immédiatement
+      updateUser({
+        firstName: profile.prenom,
+        lastName: profile.nom,
+        company: profile.entreprise,
+      });
+
+      setAvatarFile(null);
+      showToast("Profil mis à jour avec succès.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erreur inconnue";
+      showToast(`Erreur lors de la sauvegarde : ${message}`, "error");
+    } finally {
+      setSaving(false);
     }
   };
+
+
+  const initials = `${profile.prenom?.[0] ?? ""}${profile.nom?.[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="space-y-4">
-      {toast && <div className="rounded-md bg-emerald-100 px-3 py-2 text-sm text-emerald-700">{toast}</div>}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8">
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all
+            ${toast.type === "success"
+              ? "bg-emerald-600 text-white"
+              : "bg-red-600 text-white"
+            }`}
+        >
+          {toast.message}
+        </div>
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Mon profil</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-xl font-semibold text-slate-700">
-                {avatarPreview ? <img src={avatarPreview} alt="Avatar" className="h-full w-full object-cover" /> : `${profile.prenom?.[0] ?? ""}${profile.nom?.[0] ?? ""}`}
+      <div className="mx-auto max-w-3xl space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Mon profil</h1>
+          <p className="text-sm text-slate-500 mt-1">Gérez vos informations personnelles</p>
+        </div>
+
+        {/* Avatar Card */}
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-6">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">
+            Photo de profil
+          </h2>
+
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            {/* Avatar preview */}
+            <div className="relative shrink-0">
+              <div className="h-24 w-24 rounded-full overflow-hidden bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
+                {avatarPreview
+                  ? <img src={avatarPreview} alt="Avatar" className="h-full w-full object-cover" />
+                  : initials || "?"}
               </div>
-              <div className="space-y-2">
-                <label className="cursor-pointer text-sm font-medium text-cyan hover:underline">
-                  Uploader avatar
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".jpg,.jpeg,.png"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      setAvatarPreview(URL.createObjectURL(file));
-                    }}
-                  />
-                </label>
-                <p className="text-xs text-slate-500">JPG/PNG uniquement</p>
-              </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow flex items-center justify-center hover:bg-slate-50 transition-colors"
+                title="Modifier la photo"
+              >
+                <svg className="h-4 w-4 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
             </div>
 
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex-1 cursor-pointer rounded-lg border-2 border-dashed px-6 py-5 text-center transition-colors
+                ${isDragging
+                  ? "border-cyan-400 bg-cyan-50 dark:bg-cyan-950/20"
+                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                }`}
+            >
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                <span className="font-medium text-cyan-600 dark:text-cyan-400">Cliquez pour uploader</span>{" "}
+                ou glissez votre fichier ici
+              </p>
+              <p className="text-xs text-slate-400 mt-1">JPG, PNG — max 5 Mo</p>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAvatarChange(file);
+              }}
+            />
+          </div>
+
+          {/* User info preview */}
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
             <div>
-              <p className="text-lg font-semibold">
+              <p className="font-semibold text-slate-800 dark:text-slate-200">
                 {profile.prenom} {profile.nom}
               </p>
               <p className="text-sm text-slate-500">{profile.email}</p>
-              <p className="text-sm text-slate-500">{profile.telephone || "-"}</p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Badge>{roleLabel}</Badge>
-              <span className="text-xs text-slate-500">Membre depuis {memberSince}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <Badge variant="secondary">{roleLabel}</Badge>
+              <span className="text-xs text-slate-400">Membre depuis {memberSince}</span>
             </div>
-
-            <Button variant="outline" onClick={() => setEditingCard((prev) => !prev)}>
-  {editingCard ? "Annuler" : "Modifier"}
-</Button>
-
-            {editingCard && (
-              <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
-                <Input placeholder="Prenom" value={profile.prenom} onChange={(event) => setProfile((prev) => ({ ...prev, prenom: event.target.value }))} />
-                <Input placeholder="Nom" value={profile.nom} onChange={(event) => setProfile((prev) => ({ ...prev, nom: event.target.value }))} />
-                <Input placeholder="Email" value={profile.email} onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))} />
-                <Input placeholder="Telephone" value={profile.telephone} onChange={(event) => setProfile((prev) => ({ ...prev, telephone: event.target.value }))} />
-                <Button size="sm" variant="outline" onClick={saveProfile}>
-  Enregistrer
-</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-xl">Parametres</CardTitle>
-            <div className="flex flex-wrap gap-2">
-              {tabs.map((item) => (
-                 <Button
-    key={item.id}
-    size="sm"
-    variant="outline"
-    className={tab === item.id ? "border-cyan text-cyan bg-cyan/10" : ""}
-    onClick={() => setTab(item.id)}
-  >
-    {item.label}
-  </Button>
-              ))}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {tab === "infos" && (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Nom</label>
-                  <Input value={profile.nom} onChange={(event) => setProfile((prev) => ({ ...prev, nom: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Prenom</label>
-                  <Input value={profile.prenom} onChange={(event) => setProfile((prev) => ({ ...prev, prenom: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Email</label>
-                  <Input value={profile.email} onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Telephone</label>
-                  <Input value={profile.telephone} onChange={(event) => setProfile((prev) => ({ ...prev, telephone: event.target.value }))} />
-                </div>
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-sm font-medium">Entreprise</label>
-                  <Input value={profile.entreprise} onChange={(event) => setProfile((prev) => ({ ...prev, entreprise: event.target.value }))} />
-                </div>
-                <div className="md:col-span-2">
-                  <Button variant="outline"onClick={saveProfile}>Sauvegarder</Button>
-                </div>
-              </div>
-            )}
-
-            {tab === "securite" && (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Input
-                    type="password"
-                    placeholder="Ancien mot de passe"
-                    value={passwordForm.oldPassword}
-                    onChange={(event) => setPasswordForm((prev) => ({ ...prev, oldPassword: event.target.value }))}
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Nouveau mot de passe"
-                    value={passwordForm.newPassword}
-                    onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Confirmer"
-                    value={passwordForm.confirmPassword}
-                    onChange={(event) => setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
-                  />
-                </div>
-                <Button variant="outline" onClick={changePassword}>Changer le mot de passe</Button>
-
-                <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                  <div>
-                    <p className="text-sm font-medium">Authentification a deux facteurs</p>
-                    <p className="text-xs text-slate-500">Bientot disponible</p>
-                  </div>
-                  <Switch checked={false} disabled aria-label="2FA" />
-                </div>
-
-                <div>
-                  <p className="mb-2 text-sm font-medium">Sessions actives</p>
-                  <div className="space-y-2">
-                    <div className="rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
-                      Chrome - Windows - Casablanca (active)
-                    </div>
-                    <div className="rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
-                      Mobile Safari - iPhone - Rabat
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === "notifications" && (
-              <div className="space-y-4">
-                {[
-                  { key: "reponseDemande", label: "Email: nouvelle reponse a ma demande" },
-                  { key: "rappelRdv", label: "Email: rappel rendez-vous (24h avant)" },
-                  { key: "smsConfirmation", label: "SMS: confirmation rendez-vous" },
-                  { key: "nouvelleFacture", label: "Email: nouvelle facture" },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                    <p className="text-sm">{item.label}</p>
-                    <Switch
-                      checked={notif[item.key as keyof typeof notif]}
-                      onCheckedChange={(checked) => setNotif((prev) => ({ ...prev, [item.key]: checked }))}
-                      aria-label={item.label}
-                    />
-                  </div>
-                ))}
-                <Button variant="outline" onClick={saveNotifications}>Sauvegarder les preferences</Button>
-              </div>
-            )}
-
-            {tab === "confidentialite" && (
-              <div className="space-y-4">
-                <Button variant="outline">Telecharger mes donnees</Button>
-                <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/20">
-                  <p className="mb-2 text-sm font-semibold text-red-700 dark:text-red-300">Zone sensible</p>
-                  <p className="mb-3 text-sm text-red-600 dark:text-red-300">La suppression est definitive et retire toutes vos donnees.</p>
-                  <Button className={cn("bg-red-600 text-white hover:bg-red-700")} onClick={() => setShowDeleteModal(true)}>
-                    Supprimer mon compte
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Confirmer la suppression</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-600 dark:text-slate-300">Voulez-vous vraiment supprimer votre compte ? Cette action est irreversible.</p>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setEditingCard((prev) => !prev)}>
-  {editingCard ? "Annuler" : "Modifier"}
-</Button>
-                <Button
-                  className="bg-red-600 text-white hover:bg-red-700"
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    showToast("Suppression demandee. Un email de confirmation vous sera envoye.");
-                  }}
-                >
-                  Confirmer
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          </div>
         </div>
-      )}
+
+        {/* Info Card */}
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-6">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-5">
+            Informations personnelles
+          </h2>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Prénom
+              </label>
+              <Input
+                placeholder="Votre prénom"
+                value={profile.prenom}
+                onChange={(e) => setProfile((p) => ({ ...p, prenom: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Nom
+              </label>
+              <Input
+                placeholder="Votre nom"
+                value={profile.nom}
+                onChange={(e) => setProfile((p) => ({ ...p, nom: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Adresse email
+              </label>
+              <Input
+                type="email"
+                placeholder="vous@exemple.com"
+                value={profile.email}
+                onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Téléphone
+              </label>
+              <Input
+                type="tel"
+                placeholder="+212 6XX XXX XXX"
+                value={profile.telephone}
+                onChange={(e) => setProfile((p) => ({ ...p, telephone: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Société
+              </label>
+              <Input
+                placeholder="Nom de votre entreprise"
+                value={profile.entreprise}
+                onChange={(e) => setProfile((p) => ({ ...p, entreprise: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Adresse
+              </label>
+              <Input
+                placeholder="Rue, ville, code postal, pays"
+                value={profile.adresse}
+                onChange={(e) => setProfile((p) => ({ ...p, adresse: e.target.value }))}
+                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+          </div>
+
+          {/* Save button */}
+          <div className="mt-6 flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="min-w-[140px] bg-cyan-600 hover:bg-cyan-700 text-white"
+            >
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Sauvegarde...
+                </span>
+              ) : (
+                "Enregistrer les modifications"
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

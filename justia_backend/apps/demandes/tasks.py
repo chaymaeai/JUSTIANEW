@@ -29,29 +29,41 @@ def send_demande_confirmation(demande_id: str) -> None:
 @shared_task
 def notify_fournisseur_team_new_demande(demande_id: str) -> None:
     from django.contrib.auth import get_user_model
-
     from .models import Demande
 
     User = get_user_model()
     try:
-        Demande.objects.get(pk=demande_id)
+        d = Demande.objects.get(pk=demande_id)
     except Demande.DoesNotExist:
         return
-    emails = list(
-        User.objects.filter(role__in=("expert", "admin"), is_active=True).values_list(
-            "email", flat=True
-        )
-    )
-    if not emails:
-        return
-    send_mail(
-        subject="Nouvelle demande JUSTIA",
-        message=f"Une nouvelle demande nécessite votre attention (id={demande_id}).",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=emails[:10],
-        fail_silently=True,
-    )
 
+    experts = User.objects.filter(role__in=("expert", "admin"), is_active=True)
+    emails = list(experts.values_list("email", flat=True))
+
+    # ✅ Crée une notification en base pour chaque expert
+    try:
+        from apps.notifications.services import notify
+        for expert in experts:
+            notify(
+                expert.id,
+                "nouvelle_demande",
+                "Nouvelle demande",
+                f"Une nouvelle demande {d.reference} nécessite votre attention.",
+                link=f"/fournisseur/demandes",
+                demande_id=str(d.id),
+            )
+    except Exception:
+        pass
+
+    # ✅ Envoie aussi l'email
+    if emails:
+        send_mail(
+            subject=f"Nouvelle demande JUSTIA — {d.reference}",
+            message=f"Une nouvelle demande {d.reference} nécessite votre attention.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=emails[:10],
+            fail_silently=True,
+        )
 
 @shared_task
 def notify_team_new_demande(demande_id: str) -> None:

@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (email: string, password: string, options?: LoginOptions) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
+  updateUser: (data: Partial<User>) => void;
 }
 
 const TOKEN_KEY = "justia_token";
@@ -93,6 +94,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(USER_KEY);
     setUser(null);
   };
+   const updateUser = (data: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...data };
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -102,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      updateUser,
     }),
     [isLoading, user]
   );

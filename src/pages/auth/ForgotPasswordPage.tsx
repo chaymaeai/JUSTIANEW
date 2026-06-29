@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import AuthLayout from "@/components/auth/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { api, getApiErrorMessage } from "@/services/api";
 
 function getPasswordStrength(password: string) {
   let score = 0;
@@ -38,6 +39,7 @@ export default function ForgotPasswordPage() {
     return () => window.clearTimeout(timer);
   }, [countdown, step]);
 
+  // ✅ Appelle réellement POST /auth/reset-password/request/
   const sendResetLink = async () => {
     setError("");
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -45,13 +47,22 @@ export default function ForgotPasswordPage() {
       return;
     }
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setIsLoading(false);
-    setSentEmail(email);
-    setStep(2);
-    setCountdown(60);
+    try {
+      await api.post("/auth/reset-password/request/", { email: email.trim() });
+      setSentEmail(email);
+      setStep(2);
+      setCountdown(60);
+    } catch (err) {
+      // Le backend renvoie volontairement 200 même si l'email n'existe pas
+      // (pour ne pas révéler quels emails sont enregistrés), donc une erreur
+      // ici signifie un vrai problème (validation, serveur, etc.)
+      setError(getApiErrorMessage(err, "Une erreur est survenue. Veuillez réessayer."));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // ✅ Appelle réellement POST /auth/reset-password/confirm/
   const updatePassword = async () => {
     setError("");
     if (password.length < 8) {
@@ -62,11 +73,24 @@ export default function ForgotPasswordPage() {
       setError("Les mots de passe ne correspondent pas.");
       return;
     }
+    if (!token) {
+      setError("Lien de réinitialisation invalide. Veuillez refaire une demande.");
+      return;
+    }
 
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setIsLoading(false);
-    navigate("/client-space/login");
+    try {
+      await api.post("/auth/reset-password/confirm/", {
+        token,
+        new_password: password,
+        new_password_confirm: confirmPassword,
+      });
+      navigate("/client-space/login");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Lien invalide ou expiré. Veuillez refaire une demande."));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

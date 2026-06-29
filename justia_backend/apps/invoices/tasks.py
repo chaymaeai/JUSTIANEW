@@ -1,62 +1,15 @@
+"""
+apps/invoices/tasks.py
+"""
 from datetime import date
-from io import BytesIO
 
 from celery import shared_task
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 
+from .invoice_pdf import render_invoice_pdf_bytes
 from .models import Invoice
-
-
-def render_invoice_pdf_bytes(invoice: Invoice) -> bytes:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
-
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
-    y = h - 40
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, y, f"Facture {invoice.number}")
-    y -= 28
-    c.setFont("Helvetica", 10)
-    c.drawString(40, y, f"Client: {invoice.client.full_name} <{invoice.client.email}>")
-    y -= 16
-    c.drawString(40, y, f"Date d'échéance: {invoice.due_date}")
-    y -= 16
-    c.drawString(40, y, f"Devise: {invoice.currency}")
-    y -= 24
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(40, y, "Description")
-    c.drawString(280, y, "Qté")
-    c.drawString(340, y, "P.U.")
-    c.drawString(420, y, "Total")
-    y -= 14
-    c.setFont("Helvetica", 9)
-    for line in invoice.lines.all():
-        if y < 80:
-            c.showPage()
-            y = h - 40
-        c.drawString(40, y, line.description[:80])
-        c.drawRightString(320, y, str(line.quantity))
-        c.drawRightString(400, y, str(line.unit_price))
-        c.drawRightString(520, y, str(line.total))
-        y -= 14
-    y -= 10
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(360, y, "Sous-total:")
-    c.drawRightString(520, y, str(invoice.subtotal))
-    y -= 14
-    c.drawString(360, y, f"TVA ({invoice.tax_rate}%):")
-    c.drawRightString(520, y, str(invoice.tax_amount))
-    y -= 14
-    c.drawString(360, y, "Total TTC:")
-    c.drawRightString(520, y, str(invoice.total))
-    c.showPage()
-    c.save()
-    buf.seek(0)
-    return buf.read()
 
 
 def save_invoice_pdf_file(invoice: Invoice) -> None:

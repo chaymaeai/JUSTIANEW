@@ -22,7 +22,7 @@ class ConsultationListSerializer(serializers.ModelSerializer):
         fields = (
             "id", "demande", "consultation_type", "consultation_type_display",
             "status", "status_display", "scheduled_at", "duration",
-            "ended_at", "expert_name", "client_name", "created_at","report", 
+            "ended_at", "expert_name", "client_name", "created_at", "report",
             "notes",
         )
         read_only_fields = fields
@@ -98,7 +98,11 @@ class ConsultationCreateSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    # ✅ FIXED — create() est maintenant dans la classe (4 espaces d'indentation)
     def create(self, validated_data):
+        import logging
+        logger = logging.getLogger(__name__)
+
         c = Consultation.objects.create(**validated_data)
         try:
             from .tasks import (
@@ -106,11 +110,27 @@ class ConsultationCreateSerializer(serializers.ModelSerializer):
                 send_consultation_calendar_invite,
                 schedule_consultation_reminder,
             )
+            from apps.notifications.services import notify
+            from django.utils import timezone
+
             send_consultation_confirmation_email(str(c.id))
             send_consultation_calendar_invite(str(c.id))
             schedule_consultation_reminder(str(c.id), c.scheduled_at.isoformat())
+
+            notify(
+                c.client_id,
+                "consultation_planifiee",
+                "Consultation planifiée",
+                (
+                    f"Une consultation a été planifiée pour le "
+                    f"{timezone.localtime(c.scheduled_at).strftime('%d/%m/%Y à %H:%M')} "
+                    f"({c.duration} min)."
+                ),
+                link="/espace-client/consultations",
+                consultation_id=c.id,
+            )
         except Exception:
-            pass
+            logger.exception("Erreur post-création consultation %s", c.id)
         return c
 
 

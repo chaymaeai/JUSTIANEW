@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import FileDropzone from "@/components/client/FileDropzone";
 import type { Demande, DemandeStatus, DomainJuridique } from "@/types/client";
 import { api, getApiErrorMessage } from "@/services/api";
 
@@ -21,6 +20,19 @@ const domainLabels = {
   immobilier: "Immobilier",
   gouvernance: "Gouvernance",
 } as const;
+
+const domainMeta: Record<
+  DomainJuridique,
+  { icon: string; subtitle: string }
+> = {
+  droit_affaires: { icon: "🏢", subtitle: "Contrats, sociétés, litiges" },
+  rgpd: { icon: "🔒", subtitle: "Protection des données personnelles" },
+  droit_ia: { icon: "🤖", subtitle: "Responsabilité algorithmique, conformité IA" },
+  propriete_intellectuelle: { icon: "💡", subtitle: "Marques, brevets, droits d'auteur" },
+  droit_numerique: { icon: "🌐", subtitle: "Cybersécurité, e-commerce" },
+  immobilier: { icon: "🏠", subtitle: "Baux, acquisition, copropriété" },
+  gouvernance: { icon: "⚖️", subtitle: "Conformité, ESG, éthique" },
+};
 
 const statusStyles: Record<DemandeStatus, string> = {
   en_attente: "bg-amber-100 text-amber-700 border-amber-200",
@@ -60,13 +72,22 @@ type DemandeListApiResponse = {
   results: DemandeListApiItem[];
 };
 
-// ✅ Type message
 type Message = {
   id: string;
   sender_name: string;
   sender_role?: string;
   content: string;
   created_at: string;
+};
+
+// ✅ Document lié à une demande
+type DemandeDocument = {
+  id: string;
+  name: string;
+  file_type?: string;
+  size?: number;
+  created_at?: string;
+  owner_name?: string;
 };
 
 function mapListItemToDemande(item: DemandeListApiItem): Demande {
@@ -115,11 +136,16 @@ export default function ClientDemandes() {
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [actionsMenu, setActionsMenu] = useState<{ demandeId: string; top: number; left: number } | null>(null);
 
-  // ✅ État messages
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ✅ État des documents du panneau de détail (au lieu de selected.documents qui était toujours [])
+  const [documents, setDocuments] = useState<DemandeDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     domain: "" as DomainJuridique | "",
@@ -129,7 +155,6 @@ export default function ClientDemandes() {
 
   const domainOptions = Object.entries(domainLabels) as [DomainJuridique, string][];
 
-  // ✅ Charger les messages — gère les deux formats API (paginé ou tableau direct)
   const fetchMessages = useCallback(async (demandeId: string) => {
     setMessagesLoading(true);
     try {
@@ -149,14 +174,53 @@ export default function ClientDemandes() {
     }
   }, []);
 
-  // ✅ Ouvrir une demande et charger ses messages
+  // ✅ Récupère la vraie liste des documents liés à la demande (client + expert confondus)
+  const fetchDocuments = useCallback(async (demandeId: string) => {
+    setDocumentsLoading(true);
+    try {
+      const res = await api.get("/documents/", { params: { demande: demandeId } });
+      const data = res.data;
+      const results: DemandeDocument[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.results)
+        ? data.results
+        : [];
+      setDocuments(results);
+    } catch {
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, []);
+
   const openDemande = useCallback(async (demande: Demande) => {
     setSelected(demande);
     setDrawerMessage("");
-    await fetchMessages(demande.id);
-  }, [fetchMessages]);
+    await Promise.all([fetchMessages(demande.id), fetchDocuments(demande.id)]);
+  }, [fetchMessages, fetchDocuments]);
 
-  // ✅ Envoyer un message et rafraîchir le fil
+  // ✅ Upload réel d'un document depuis le panneau de détail
+  const handleAddDocument = async (file: File) => {
+    if (!selected) return;
+    setUploadingDoc(true);
+    try {
+      const documentForm = new FormData();
+      documentForm.append("demande", selected.id);
+      documentForm.append("name", file.name);
+      documentForm.append("file", file, file.name);
+      documentForm.append("file_type", "piece_jointe");
+      documentForm.append("is_private", "false");
+      await api.post("/documents/", documentForm);
+      await fetchDocuments(selected.id);
+      setToast("Document ajouté avec succès.");
+    } catch (err) {
+      setToast(getApiErrorMessage(err, "Erreur lors de l'ajout du document."));
+    } finally {
+      setUploadingDoc(false);
+      setTimeout(() => setToast(""), 3000);
+    }
+  };
+
   const sendClientMessage = async () => {
     if (!drawerMessage.trim() || !selected || isSending) return;
     setIsSending(true);
@@ -483,7 +547,6 @@ export default function ClientDemandes() {
           document.body
         )}
 
-      {/* ✅ Panneau détail demande avec messagerie réelle */}
       {selected && (
         <div className="fixed inset-0 z-40 bg-black/40">
           <aside className="ml-auto h-full w-full max-w-[480px] overflow-y-auto bg-white p-5 dark:bg-slate-900">
@@ -513,12 +576,23 @@ export default function ClientDemandes() {
               <p>● En cours de traitement — {new Date(selected.updatedAt).toLocaleDateString("fr-FR")}</p>
             </div>
 
-            <div className="mb-5 space-y-2 text-sm">
+            {/* ✅ Documents attachés — chargés réellement via fetchDocuments, plus de tableau vide codé en dur */}
+            <div className="mb-3 space-y-2 text-sm">
               <p className="font-medium">Documents attaches</p>
-              {selected.documents.length === 0
-                ? <p className="text-slate-500">Aucun document.</p>
-                : selected.documents.map((doc) => <p key={doc.id}>{doc.name}</p>)
-              }
+              {documentsLoading ? (
+                <p className="text-slate-500">Chargement...</p>
+              ) : documents.length === 0 ? (
+                <p className="text-slate-500">Aucun document.</p>
+              ) : (
+                documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                    <span className="truncate">{doc.name}</span>
+                    {doc.owner_name && (
+                      <span className="ml-2 shrink-0 text-xs text-slate-400">{doc.owner_name}</span>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="mb-5 space-y-2 text-sm">
@@ -534,13 +608,29 @@ export default function ClientDemandes() {
               )}
             </div>
 
-            <Button variant="outline" className="mb-4">Ajouter un document</Button>
+            {/* ✅ Input fichier caché + bouton réellement branché */}
+            <input
+              type="file"
+              ref={docInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleAddDocument(file);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              variant="outline"
+              className="mb-4"
+              disabled={uploadingDoc}
+              onClick={() => docInputRef.current?.click()}
+            >
+              {uploadingDoc ? "Envoi en cours..." : "Ajouter un document"}
+            </Button>
 
-            {/* ✅ Messagerie avec vrais messages API */}
             <div className="space-y-3">
               <p className="text-sm font-medium">Messagerie avec l'expert</p>
 
-              {/* Zone messages */}
               <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 dark:bg-slate-800">
                 {messagesLoading ? (
                   <p className="text-center text-xs text-slate-400">Chargement...</p>
@@ -578,7 +668,6 @@ export default function ClientDemandes() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Zone saisie */}
               <Textarea
                 value={drawerMessage}
                 onChange={(event) => setDrawerMessage(event.target.value)}
@@ -615,66 +704,292 @@ export default function ClientDemandes() {
             <CardContent className="space-y-5">
               {step === 1 && (
                 <div className="grid gap-3 md:grid-cols-3">
-                  {domainOptions.map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, domain: value }))}
-                      className={cn(
-                        "rounded-xl border p-4 text-left text-sm transition",
-                        form.domain === value ? "border-cyan bg-cyan/10" : "border-slate-200 dark:border-slate-700"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  {domainOptions.map(([value, label]) => {
+                    const meta = domainMeta[value];
+                    const isSelected = form.domain === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, domain: value }))}
+                        className={cn(
+                          "flex flex-col items-start gap-2 rounded-xl border p-4 text-left text-sm transition hover:border-cyan/60 hover:bg-cyan/5",
+                          isSelected
+                            ? "border-cyan bg-cyan/10"
+                            : "border-slate-200 dark:border-slate-700"
+                        )}
+                      >
+                        <span className="text-2xl" aria-hidden="true">
+                          {meta.icon}
+                        </span>
+                        <span className="font-medium leading-tight">{label}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 leading-snug">
+                          {meta.subtitle}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {step === 2 && (
-                <div className="space-y-4">
-                  <Textarea
-                    value={form.description}
-                    onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                    placeholder="Decrivez votre situation..."
-                    className="min-h-[140px]"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {(["normale", "urgente", "critique"] as const).map((urgency) => (
-                      <button
-                        key={urgency}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, urgency }))}
+                <div className="space-y-5">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+                    <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      💡 Décrivez le contexte, les parties impliquées, les enjeux et les délais.
+                      Plus la description est détaillée, meilleure sera l&apos;analyse.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Description de la situation
+                      <span className="ml-1 text-red-500" aria-hidden="true">*</span>
+                    </label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                      placeholder={
+                        "Décrivez le contexte, les parties impliquées, les enjeux et les délais.\n" +
+                        "Plus la description est détaillée, meilleure sera l'analyse."
+                      }
+                      className="min-h-[180px] resize-none text-sm leading-relaxed"
+                    />
+                    <div className="flex items-center justify-between">
+                      <p
                         className={cn(
-                          "rounded-full border px-4 py-1.5 text-sm",
-                          form.urgency === urgency ? "border-cyan bg-cyan/10 text-cyan" : "border-slate-200 dark:border-slate-700"
+                          "text-xs transition-colors",
+                          form.description.trim().length === 0
+                            ? "text-slate-400"
+                            : form.description.trim().length < 10
+                            ? "text-red-500"
+                            : form.description.trim().length < 80
+                            ? "text-amber-500"
+                            : "text-green-600"
                         )}
                       >
-                        {urgency}
-                      </button>
-                    ))}
+                        {form.description.trim().length === 0 && "Minimum 10 caractères requis"}
+                        {form.description.trim().length > 0 && form.description.trim().length < 10 && (
+                          `Encore ${10 - form.description.trim().length} caractère(s) requis`
+                        )}
+                        {form.description.trim().length >= 10 && form.description.trim().length < 80 && "Bonne description — plus de détails améliorent l'analyse"}
+                        {form.description.trim().length >= 80 && "Description détaillée ✓"}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {form.description.length} caractères
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
-              {step === 3 && <FileDropzone files={newFiles} setFiles={setNewFiles} />}
+
+              {step === 3 && (
+                <div className="space-y-4">
+                  <div className="grid gap-3">
+                    {(
+                      [
+                        {
+                          value: "normale",
+                          label: "Normale",
+                          responseTime: "Temps de réponse estimé : 48–72h",
+                          desc: "Situation sans délai immédiat, traitement dans l'ordre des priorités.",
+                          badgeColor: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300",
+                          dotColor: "bg-slate-400",
+                        },
+                        {
+                          value: "urgente",
+                          label: "Urgente",
+                          responseTime: "Temps de réponse estimé : 12–24h",
+                          desc: "Situation nécessitant une intervention rapide avec un délai contraint.",
+                          badgeColor: "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/20 dark:text-amber-400",
+                          dotColor: "bg-amber-400",
+                        },
+                        {
+                          value: "critique",
+                          label: "Critique",
+                          responseTime: "Réponse prioritaire immédiate",
+                          desc: "Situation d'urgence absolue requérant une action sans délai.",
+                          badgeColor: "bg-red-50 text-red-700 border-red-300 dark:bg-red-900/20 dark:text-red-400",
+                          dotColor: "bg-red-500",
+                        },
+                      ] as const
+                    ).map(({ value, label, responseTime, desc, badgeColor, dotColor }) => {
+                      const isSelected = form.urgency === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, urgency: value }))}
+                          className={cn(
+                            "flex w-full items-start gap-4 rounded-xl border p-4 text-left transition hover:border-cyan/60 hover:bg-cyan/5",
+                            isSelected
+                              ? "border-cyan bg-cyan/10"
+                              : "border-slate-200 dark:border-slate-700"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                              isSelected
+                                ? "border-cyan bg-cyan"
+                                : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
+                            )}
+                            aria-hidden="true"
+                          >
+                            {isSelected && (
+                              <span className="h-2 w-2 rounded-full bg-white" />
+                            )}
+                          </span>
+
+                          <div className="flex-1 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                                {label}
+                              </span>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                                  badgeColor
+                                )}
+                              >
+                                <span className={cn("h-1.5 w-1.5 rounded-full", dotColor)} aria-hidden="true" />
+                                {responseTime}
+                              </span>
+                            </div>
+                            <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                              {desc}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {step === 4 && (
-                <Card className="rounded-lg border-l-4 border-l-cyan p-4 text-sm">
-                  <p>Domaine: {form.domain ? domainLabels[form.domain] : "-"}</p>
-                  <p>Urgence: {form.urgency}</p>
-                  <p>Description: {form.description || "-"}</p>
-                  <p>Documents: {newFiles.length}</p>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Formats acceptés : PDF, DOC, DOCX, JPG, PNG, ZIP · Max 10 Mo par fichier
+                    </p>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800">
+                      Facultatif
+                    </span>
+                  </div>
+
+                  <label
+                    htmlFor="file-upload"
+                    className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-cyan/50 hover:bg-cyan/5 dark:border-slate-700 dark:bg-slate-800/40"
+                  >
+                    <span className="text-3xl" aria-hidden="true">📎</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Glissez vos fichiers ici ou{" "}
+                        <span className="text-cyan underline underline-offset-2">parcourez</span>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">PDF, DOC, DOCX, JPG, PNG, ZIP</p>
+                    </div>
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const incoming = Array.from(e.target.files ?? []);
+                        setNewFiles((prev) => {
+                          const existing = new Set(prev.map((f) => f.name + f.size));
+                          return [...prev, ...incoming.filter((f) => !existing.has(f.name + f.size))];
+                        });
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+
+                  {newFiles.length > 0 && (
+                    <ul className="space-y-2">
+                      {newFiles.map((file, idx) => {
+                        const ext = file.name.split(".").pop()?.toUpperCase() ?? "FILE";
+                        const sizeKb = file.size / 1024;
+                        const sizeLabel =
+                          sizeKb >= 1024
+                            ? `${(sizeKb / 1024).toFixed(1)} Mo`
+                            : `${Math.round(sizeKb)} Ko`;
+                        const extColors: Record<string, string> = {
+                          PDF: "bg-red-50 text-red-600 border-red-200",
+                          DOC: "bg-blue-50 text-blue-600 border-blue-200",
+                          DOCX: "bg-blue-50 text-blue-600 border-blue-200",
+                          JPG: "bg-green-50 text-green-600 border-green-200",
+                          JPEG: "bg-green-50 text-green-600 border-green-200",
+                          PNG: "bg-green-50 text-green-600 border-green-200",
+                          ZIP: "bg-amber-50 text-amber-600 border-amber-200",
+                        };
+                        const badgeCls = extColors[ext] ?? "bg-slate-50 text-slate-600 border-slate-200";
+                        return (
+                          <li
+                            key={`${file.name}-${idx}`}
+                            className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"
+                          >
+                            <span
+                              className={cn(
+                                "shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+                                badgeCls
+                              )}
+                            >
+                              {ext}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                              {file.name}
+                            </span>
+                            <span className="shrink-0 text-xs text-slate-400">{sizeLabel}</span>
+                            <span className="shrink-0 text-xs font-medium text-green-600">✓ Prêt</span>
+                            <button
+                              type="button"
+                              aria-label={`Supprimer ${file.name}`}
+                              onClick={() =>
+                                setNewFiles((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {newFiles.length === 0 && (
+                    <p className="text-center text-xs text-slate-400">
+                      Aucun fichier sélectionné — vous pouvez passer cette étape.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {step === 5 && (
+                <Card className="rounded-lg border-l-4 border-l-cyan p-4 text-sm space-y-1">
+                  <p><span className="font-medium">Domaine :</span> {form.domain ? domainLabels[form.domain] : "-"}</p>
+                  <p><span className="font-medium">Urgence :</span> {form.urgency}</p>
+                  <p><span className="font-medium">Description :</span> {form.description || "-"}</p>
+                  <p><span className="font-medium">Documents :</span> {newFiles.length > 0 ? `${newFiles.length} fichier(s)` : "Aucun"}</p>
                 </Card>
               )}
+
               <div className="flex items-center justify-between">
                 <Button variant="outline" onClick={() => setStep((prev) => Math.max(1, prev - 1))} disabled={step === 1}>
-                  Precedent
+                  Précédent
                 </Button>
-                {step < 4 ? (
+                {step < 5 ? (
                   <Button
                     className="bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                    onClick={() => setStep((prev) => Math.min(4, prev + 1))}
-                    disabled={(step === 1 && !form.domain) || (step === 2 && form.description.trim().length < 10)}
+                    onClick={() => setStep((prev) => Math.min(5, prev + 1))}
+                    disabled={
+                      (step === 1 && !form.domain) ||
+                      (step === 2 && form.description.trim().length < 10)
+                    }
                   >
-                    Suivant
+                    {step === 4 ? (newFiles.length > 0 ? "Suivant" : "Passer cette étape") : "Suivant"}
                   </Button>
                 ) : (
                   <Button

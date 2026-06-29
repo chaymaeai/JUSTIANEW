@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "@/services/api";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -13,12 +14,11 @@ import {
   Users,
   BarChart3,
   FileText,
-  Plus,
   Newspaper,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type NavItemType = {
@@ -36,7 +36,6 @@ const navItems: NavItemType[] = [
   { icon: CalendarDays, label: "Calendrier", to: "/fournisseur/calendar" },
   { icon: FolderOpen, label: "Documents", to: "/fournisseur/documents" },
   { icon: FileText, label: "Facturation", to: "/fournisseur/facturation" },
-  { icon: UserCircle2, label: "Equipe", to: "/fournisseur/equipe", adminOnly: true },
   { icon: BarChart3, label: "Rapports", to: "/fournisseur/reports" },
 ];
 
@@ -75,10 +74,26 @@ export default function FournisseurLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [notifications, setNotifications] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    is_read: boolean;
+    created_at: string;
+  }[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    api.get("/notifications/").then(res => {
+      const data = res.data?.results ?? res.data ?? [];
+      setNotifications(data);
+    }).catch(() => {});
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const displayName = user ? `${user.firstName} ${user.lastName}` : "Expert JUSTIA";
   const specialization = "Droit des affaires";
-  const notificationsCount = 5;
 
   const pageTitle = useMemo(() => {
     if (location.pathname.startsWith("/fournisseur/clients/")) return "Detail client";
@@ -89,6 +104,7 @@ export default function FournisseurLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 hidden h-screen w-[280px] bg-[#001A33] p-6 lg:flex lg:flex-col">
         <div>
           <p className="text-xl font-semibold text-white">JUSTIA</p>
@@ -114,17 +130,38 @@ export default function FournisseurLayout() {
         </nav>
 
         <div className="mt-auto space-y-1 border-t border-white/10 pt-4">
-          <button className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-100/85 transition hover:bg-white/10 hover:text-white">
-            <span className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              Notifications
-            </span>
-            <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{notificationsCount}</span>
-          </button>
-          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-100/85 transition hover:bg-white/10 hover:text-white">
-            <Settings className="h-4 w-4" />
-            Parametres
-          </button>
+          {/* Notifications sidebar */}
+          <NavLink
+  to="/fournisseur/notifications"
+  className={({ isActive }) =>
+    cn(
+      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition",
+      isActive ? "bg-cyan text-white" : "text-slate-100/85 hover:bg-white/10 hover:text-white"
+    )
+  }
+>
+  <span className="flex items-center gap-2">
+    <Bell className="h-4 w-4" />
+    Notifications
+  </span>
+  {unreadCount > 0 && (
+    <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{unreadCount}</span>
+  )}
+</NavLink>
+
+          <NavLink
+  to="/fournisseur/parametres"
+  className={({ isActive }) =>
+    cn(
+      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
+      isActive ? "bg-cyan text-white" : "text-slate-100/85 hover:bg-white/10 hover:text-white"
+    )
+  }
+>
+  <Settings className="h-4 w-4" />
+  Parametres
+</NavLink>
+
           <button
             onClick={() => {
               logout();
@@ -138,6 +175,7 @@ export default function FournisseurLayout() {
         </div>
       </aside>
 
+      {/* Header */}
       <header className="fixed left-0 top-0 z-20 h-16 w-full border-b border-slate-200 bg-white px-4 lg:left-[280px] lg:w-[calc(100%-280px)] lg:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <h1 className="text-lg font-semibold text-slate-900">{pageTitle}</h1>
@@ -151,14 +189,53 @@ export default function FournisseurLayout() {
                 className="pl-9"
               />
             </div>
-            <button className="relative rounded-full p-2 text-slate-600 transition hover:bg-slate-100" aria-label="Notifications">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
-            </button>
-            <Button className="bg-cyan text-white hover:bg-cyan/90">
-              <Plus className="mr-1.5 h-4 w-4" />
-              Nouvelle demande +
-            </Button>
+
+            {/* Bouton cloche header */}
+            <div className="relative">
+              <button
+                className="relative rounded-full p-2 text-slate-600 transition hover:bg-slate-100"
+                onClick={() => setShowNotifications(!showNotifications)}
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+                )}
+              </button>
+
+              {/* Dropdown notifications */}
+              {showNotifications && (
+                <div className="absolute right-0 top-10 z-50 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <p className="font-semibold text-sm">Notifications</p>
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="p-4 text-sm text-slate-400 text-center">Aucune notification</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div
+                          key={n.id}
+                          className={`px-4 py-3 border-b border-slate-50 text-sm ${!n.is_read ? "bg-cyan/5" : ""}`}
+                        >
+                          <p className="font-medium text-slate-800">{n.title}</p>
+                          <p className="text-slate-500 text-xs mt-0.5">{n.message}</p>
+                          <p className="text-slate-400 text-xs mt-1">
+                            {new Date(n.created_at).toLocaleString("fr-FR")}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>

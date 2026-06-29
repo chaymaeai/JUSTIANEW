@@ -54,3 +54,4 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             recipient=request.user, is_read=False
         ).count()
         return Response({"count": count})
+

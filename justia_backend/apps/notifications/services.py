@@ -69,7 +69,10 @@ def notify(
     payload = NotificationSerializer(n, context={}).data
     send_ws_notification(recipient_id, payload)
     if should_send_email(recipient, notif_type):
-        send_notification_email.delay(str(n.id))
+        try:
+            send_notification_email.delay(str(n.id))
+        except Exception:
+            pass  # Celery non disponible en dev
     return n
 
 
@@ -79,12 +82,14 @@ def notify_staff_new_client(client) -> None:
 
     logger = logging.getLogger(__name__)
     name = (client.full_name or "").strip() or client.email
-    link = f"/fournisseur/clients/{client.id}"
-    message = f"{name} a verifie son compte ({client.email})."
+    message = f"{name} a vérifié son compte ({client.email})."
     staff = User.objects.filter(
         role__in=("fournisseur", "admin"), is_active=True
-    ).only("id")
+    ).only("id", "role")
+
     for u in staff.iterator():
+        # Lien adapté selon le rôle
+        link = f"/admin/clients/{client.id}" if u.role == "admin" else f"/fournisseur/clients/{client.id}"
         try:
             notify(
                 u.id,

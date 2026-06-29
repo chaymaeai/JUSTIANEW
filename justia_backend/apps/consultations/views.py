@@ -86,9 +86,31 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             return [IsFournisseurOrAdmin()]
         return [IsAuthenticated()]
 
+    # ✅ AJOUTE ICI
+    def perform_create(self, serializer):
+        consultation = serializer.save()
+        from apps.notifications.services import notify
+        try:
+            notify(
+                recipient_id=consultation.client_id,
+                notif_type="rdv_confirme",
+                title="Consultation planifiée",
+                message=(
+                    f"Votre consultation a été planifiée pour le "
+                    f"{consultation.scheduled_at.strftime('%d/%m/%Y à %H:%M')}."
+                ),
+                link=f"/client-space/consultations",
+                consultation_id=consultation.id,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("Erreur notify client: %s", e)
+
     @extend_schema(tags=["consultations"])
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
+
+
         c = self.get_object()
         if not _can_cancel(request.user, c):
             raise PermissionDenied()
